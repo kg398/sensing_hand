@@ -21,7 +21,25 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="kg_robot.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="kg_robot_dashboard.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="sensing_hand.py" />
+    <Compile Include="skin_sense.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="teach_mode.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="waypoints.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="wrist_control.py">
+      <SubType>Code</SubType>
+    </Compile>
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in
