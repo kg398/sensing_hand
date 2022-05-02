@@ -40,12 +40,12 @@ class kg_robot():
             print("Connected to UR5\r\n")
             self.open=True
 
-            self.home(pose = wp.burt_homej, wait=False)
+            #self.home(pose = wp.burt_homej, wait=False)
 
 
         #init gripper connection and update robot tcp
         if ee_port!=False:
-            self.ee = serial.Serial(self.ee_port, 9600)  # open serial port
+            self.ee = serial.Serial(self.ee_port, 115200)  # open serial port
             self.ee.close()
             self.ee.open()
             while self.ee.isOpen()==False:
@@ -54,12 +54,16 @@ class kg_robot():
 
             #self.ee.write(str.encode("N0\n"))
             #self.ee.send_break()
-            #self.ee.reset_input_buffer()
-            time.sleep(1) # This is needed to allow MBED to send back command in time!
-            #ipt = bytes.decode(self.ee.readline())
-            self.serial_send('R',0)
-            time.sleep(0.05)
             self.ee.reset_input_buffer()
+            #time.sleep(1) # This is needed to allow MBED to send back command in time!
+            #ipt = bytes.decode(self.ee.readline())
+            self.serial_reset()
+            time.sleep(0.2)
+            self.serial_reset()
+            time.sleep(0.2)
+            #self.serial_send('R',0)
+            time.sleep(0.05)
+            #self.ee.reset_input_buffer()
             ipt = bytes.decode(self.ee.readline())
             print("Connected to",ipt)
 
@@ -103,6 +107,18 @@ class kg_robot():
             print(".......................Some kind of error :(.......................")
             input("press enter to continue")
         return msg
+
+    def socket_flush(self):
+        self.c.settimeout(1)
+        self.c.send(str.encode(self.format_prog(40)))
+        while(1):
+            try:
+                print(bytes.decode(self.c.recv(1024)))
+                print(1)
+            except:
+                print('Data flushed')
+                break
+        self.c.settimeout(None)
     
     def socket_send(self, prog):
         msg = "No message from robot"
@@ -127,15 +143,26 @@ class kg_robot():
             wait=1
         return "({},{},{},{},{},{},{},{},{},{},{},{})\n".format(CMD,*pose,acc,vel,t,r,wait)
 
+    def serial_reset(self):
+        self.ee.reset_input_buffer()
+        time.sleep(0.2)
+        self.ee.write(b'R')
+        time.sleep(0.2)
+        self.ee.write(b'0')
+        time.sleep(0.2)
+        self.ee.write(b'\n')
+        return
+
     def serial_send(self,cmd,var,wait=True):
         ipt = ""
         self.ee.reset_input_buffer()
-        time.sleep(0.2)
+        #time.sleep(0.2)
         self.ee.write(str.encode(cmd))
-        time.sleep(0.2)
+        time.sleep(0.02)
         self.ee.write(str.encode(chr(var+48)))
-        time.sleep(0.2)
+        time.sleep(0.02)
         self.ee.write(b'\n')
+        #self.ee.write(str.encode(cmd+chr(var+48)+"\n"))
         #wait for cmd acknowledgement
         while True:
             ipt = bytes.decode(self.ee.readline())
@@ -480,11 +507,11 @@ class kg_robot():
             prog = self.format_prog(21,pose=cog+[0,0,0],acc=weight)
         return self.socket_send(prog)
 
-    def set_digital_out(self, port, val=1):
+    def set_digital_out(self, port, val=1, wait=True):
         """
         set configurable digital out (port) to val
         """
-        prog = self.format_prog(22,acc=port,vel=val)
+        prog = self.format_prog(22,acc=port,vel=val,w=wait)
         return self.socket_send(prog)
 
 
@@ -541,6 +568,16 @@ class kg_robot():
         """
         return self.serial_send("S",0,wait)
 
+    def ee_force_stop(self):
+        self.ee.reset_input_buffer()
+        time.sleep(0.2)
+        self.ee.write(b'S')
+        time.sleep(0.2)
+        self.ee.write(b'0')
+        time.sleep(0.2)
+        self.ee.write(b'\n')
+        return
+
     #-------------------------------------------------------------------------------------------------------------------------------------------------------------------
     #
     #                                                                      Special Functions
@@ -567,12 +604,12 @@ class kg_robot():
         self.out1.release()
         self.out2.release()
 
-    def stream_data_start(self,t):
-        prog = self.format_prog(41,acc=t)
+    def stream_data_start(self,t,wait=True):
+        prog = self.format_prog(41,acc=t,w=wait)
         return self.socket_send(prog)
 
-    def stream_data_stop(self):
-        prog = self.format_prog(42)
+    def stream_data_stop(self,wait=True):
+        prog = self.format_prog(42,w=wait)
         return self.socket_send(prog)
 
     def your_generic_robot_function(self):
