@@ -49,13 +49,20 @@ class skin_sense():
 
         if noise==1: # add 2d random gaussian shift
             label = '_shift'
-            xshift = random.gauss(0, 0.002)
-            yshift = random.gauss(0, 0.002)
+            #xshift = random.gauss(0, 0.002)
+            #yshift = random.gauss(0, 0.002)
+            r = random.uniform(0,0.005)
+            theta = random.uniform(0,2*np.pi)
+            xshift = r*np.sin(theta)
+            yshift = r*np.cos(theta)
             print('xshift: ',xshift)
             print('yshift: ',yshift)
-            for i in range(0,len(sequence)):
+            for i in range(0,kp[-1]):
                 sequence[i][0][0] += xshift
                 sequence[i][0][1] += yshift
+            for i in range(0,10):
+                sequence[i+kp[-1]][0][0] += xshift*(10-i)/10
+                sequence[i+kp[-1]][0][1] += yshift*(10-i)/10
         elif noise==2: # add 2d noise to each keypoint
             label = '_kpnoise'
             for i in range(0,len(kp)):
