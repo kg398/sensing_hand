@@ -41,6 +41,10 @@ class skin_sense():
         play_and_read(self.robot, name, ft, pos, skin, cam, rp)
         return
 
+    def play_err(self, name, ft=False, pos=False, skin=True, cam=True, rp=0, noise=0, rec=False):
+        play_and_read_err(self.robot, name, ft, pos, skin, cam, rp, rec)
+        return
+
     def generate(self, name, kp=0, noise=0, rp=0):
         #name = 'exp2/test_1650898610_traj.json'
         #kp = [0,30,60,70,74,92,96,108]
@@ -164,6 +168,79 @@ def read_data(burt,name='test',start_time=0,ft=False,pos=True,skin=True,cam=True
         burt.ping()
     return
 
+def read_data_err(burt,name='test',start_time=0,ft=False,pos=True,skin=True,cam=True):
+    global thread_flag
+    thread_flag = True
+    global ft_data
+    ft_data = [0,0,0,0,0,0]
+    global pos_data
+    pos_data = [0,0,0,0,0,0]
+    global skin_data
+    skin_data = []
+    global pred
+    pred = 0
+    global d
+    d = 0
+    global choice
+    choice = -1
+
+    with open('{}_data.csv'.format(name), 'w', newline='') as csvfile:
+        names = ['n']+['t']+['x','y','z','rx','ry','rz']+['fx','fy','fz','tx','ty','tz']+['skin']
+        csvwriter = csv.writer(csvfile)
+        csvwriter.writerow(names)
+       
+        n=0
+        #d=0
+        if cam == True:
+            global cam_thread_flag
+            _thread.start_new_thread(read_cam,(burt,name,))
+        if ft == True:
+            global ft_thread_flag
+            _thread.start_new_thread(read_ft,(burt,start_time,))
+        #if pos == True:
+        #    global pos_thread_flag
+        #    _thread.start_new_thread(read_pos,(burt,start_time,False))
+        if skin == True:
+            global skin_thread_flag
+            _thread.start_new_thread(read_skin,(burt,start_time,))
+
+        tic = time.time()
+        while thread_flag == True:
+            current_time = time.time()-tic
+            if pos == True:
+                pos_data = burt.getl()
+            toc2 = time.time()
+            if skin_data != []:
+                if d<50:
+                    #burt.mat.write(str(skin_data+[choice]))
+                    burt.mat.write(str(skin_data))
+                    d+=1
+                elif d<150:
+                    burt.mat.write(str(skin_data))
+                    pred = float(burt.mat.read())
+                    d+=1
+                else:
+                    pred = 0
+            tic2 = time.time()
+            csvwriter.writerow([n,current_time]+pos_data+ft_data+skin_data+[pred]+[choice])
+            n+=1
+            time.sleep(0.1-(tic2-toc2))
+
+        print(n)
+        ft_thread_flag = False
+        pos_thread_flag = False
+        skin_thread_flag = False
+        cam_thread_flag = False
+        time.sleep(0.5)
+        burt.stream_data_stop(wait=False)
+        burt.ee_force_stop()
+        burt.stream_data_stop()
+        burt.ee_force_stop()
+        time.sleep(0.1)
+        burt.ee_stop_streaming()
+        burt.ping()
+    return
+
 def read_traj(burt,name='test',start_time=0,ft=False,pos=True,skin=True,cam=True):
     global thread_flag
     thread_flag = True
@@ -243,8 +320,11 @@ def play_and_read(burt, name, ft=False, pos=True, skin=True, cam=True, rp=0):
     
     toc = time.time()
     for i in range(1,len(sequence)-1):
+        #toc2 = time.time()
+        
         burt.set_digital_out(0,sequence[i][2])
         burt.servoj(sequence[i][0],control_time=sequence[i][1],lookahead_time=0.008,gain=300)
+        #print(time.time()-toc2)
 
     burt.stopl(0.5)
     thread_flag = False
@@ -256,6 +336,130 @@ def play_and_read(burt, name, ft=False, pos=True, skin=True, cam=True, rp=0):
     print("executed in ",tic-toc,"secs")
     print("recorded end_pos: ",sequence[-1][0])
     print("actual end_pos:",burt.getl())
+
+def play_and_read_err(burt, name, ft=False, pos=True, skin=True, cam=True, rp=0, rec=False):
+    sequence = json.load(open(name))
+    print(len(sequence))
+    print("average timestep: ",sequence[-1][1]/(len(sequence)-2))
+    
+    burt.movel(sequence[0][0])
+
+    # predictor params
+    thresh = 0.2
+    dthresh = 0.2
+    smoothing_b = [1]
+    smoothing_a = 1
+    pred_start = 70
+    db = [0.5, 0.25, 0.125, 0.0625, 0.03125, 0.03125]
+    da = 1
+    y = []
+    yf = []
+    yfd = []
+    yfdf = []
+
+    start_time = int(time.time())
+    #name = name.split('.')[0]+'_replay{}'.format(rp)
+    name = name.split('.')[0]
+    
+    burt.mat.write(str(skin_data))
+    global thread_flag
+    _thread.start_new_thread(read_data_err,(burt,name,start_time,ft,pos,skin,cam))
+
+    global pred
+    global d
+    global choice
+    choice = -1
+    adj=0
+    adj_rate = 0.001
+    #Z = []
+    burt.mat.write('start')
+    print(burt.mat.read())
+    
+    toc = time.time()
+    for i in range(1,len(sequence)-1):
+        #toc2 = time.time()
+        
+        burt.set_digital_out(0,sequence[i][2])
+        burt.servoj(sequence[i][0],control_time=sequence[i][1],lookahead_time=0.008,gain=300)
+
+        #time.sleep(0.01)
+        #Z.append(pred)
+        print(pred)
+        if choice==-1:
+            y.append(pred)
+            if d<len(smoothing_b):
+                yf.append(y[-1])
+            else:
+                f = 0
+                for j in range(0,len(smoothing_b)):
+                    f+=y[-1-j]*smoothing_b[j]
+                yf.append(f)
+            if d<2:
+                yfd.append(0)
+            else:
+                yfd.append(abs((yf[-1]-yf[-2])/0.1))
+            if d<len(db):
+                yfdf.append(yfd[-1])
+            else:
+                f = 0
+                for j in range(0,len(db)):
+                    f+=yfd[-1-j]*db[j]
+                yfdf.append(f)
+            print(yf[-1],yfd[-1],yfdf[-1])
+            if d>pred_start:
+                if(yf[-1]>-thresh and yf[-1]<thresh) and yfdf[-1]<dthresh:
+                    choice = 0
+                if(yf[-1]>1-thresh and yf[-1]<1+thresh) and yfdf[-1]<dthresh:
+                    choice = 1
+                if(yf[-1]>2-thresh and yf[-1]<2+thresh) and yfdf[-1]<dthresh:
+                    choice = 2
+                if(yf[-1]>3-thresh and yf[-1]<3+thresh) and yfdf[-1]<dthresh:
+                    choice = 3
+                if(yf[-1]>4-thresh and yf[-1]<4+thresh) and yfdf[-1]<dthresh:
+                    choice = 4
+        elif choice!=0 and rec==True:
+            if i<len(sequence)-60:
+                if adj<4:
+                    adj+=1
+                dx=-adj*0.005
+                dy=adj*0.001
+                #dy=0
+                print(dx, dy)
+                sequence[i+1][0] = [sequence[i+1][0][0]+dx, sequence[i+1][0][1]+dy, sequence[i+1][0][2], sequence[i+1][0][3], sequence[i+1][0][4], sequence[i+1][0][5]]
+            elif i<len(sequence)-2:
+                if adj>0:
+                    adj-=1
+                dx=-adj*0.005
+                dy=adj*0.001
+                print(dx, dy)
+                sequence[i+1][0] = [sequence[i+1][0][0]+dx, sequence[i+1][0][1]+dy, sequence[i+1][0][2], sequence[i+1][0][3], sequence[i+1][0][4], sequence[i+1][0][5]]
+
+
+        #if pred>0.8:
+        #    burt.stopl(0.5)
+        #    print('start recovery sequence')
+        #    input('press enter to continue...')
+        #    break
+
+        #print(time.time()-toc2)
+
+        #time.sleep(0.1-(time.time()-toc2))
+
+    
+    #open('{}_err.json'.format(name), "w").write(json.dumps(Z))
+
+    burt.stopl(0.5)
+    burt.mat.write('stop')
+    thread_flag = False
+    tic = time.time()
+    time.sleep(0.5)
+    burt.ping()
+    #burt.socket_flush()
+    print("recorded ",sequence[-1][1],"secs")
+    print("executed in ",tic-toc,"secs")
+    print("recorded end_pos: ",sequence[-1][0])
+    print("actual end_pos:",burt.getl())
+
 
 def read_ft(burt,start_time):
     global ft_thread_flag

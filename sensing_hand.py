@@ -1,6 +1,8 @@
 import waypoints as wp
 import time
 import serial
+import socket
+import sys
 import numpy as np
 import nidaqmx
 import _thread
@@ -15,8 +17,8 @@ import kg_robot as kgr
 
 def main():
     print("------------Configuring Burt-------------\r\n")
-    burt = kgr.kg_robot()
-    #burt = kgr.kg_robot(port=30010,ee_port="COM45",db_host="192.168.1.10")
+    #burt = kgr.kg_robot(matlab_port="10000")
+    burt = kgr.kg_robot(port=30010,ee_port="COM45",db_host="192.168.1.10",matlab_port="10000")
     #burt = kgr.kg_robot(port=30010,db_host="192.168.1.10")
     #burt = kgr.kg_robot(ee_port="COM47")
     #burt = kgr.kg_robot(port=30010,ee_port="COM32",db_host="192.168.1.51")
@@ -51,9 +53,11 @@ def main():
                 if name=='':
                     #name = input('name: ')
                     #name = 'exp1/test_1650898610_traj_kp.json'
-                    name = 'exp1/test_1650898610_traj.json'
+                    #name = 'exp1/test_1650898610_traj.json'
+                    name = 'exp1_lablive/test_1650898610_traj.json'
+                    #name = 'exp1_apt/test_1650898610_traj.json'
                     #name = 'exp2/test_1650898610_traj.json'
-                    #name = 'exp3/test_1651576480_traj.json'
+                    #name = 'exp3_rec/test_1651576480_traj.json'
                 if rp == 0:
                     rp = int(input('replay no.: '))
                 for i in range(0,int(input('iter: '))):
@@ -73,9 +77,44 @@ def main():
                     #ax[1].plot(x, yo, linewidth=2.0)
                     #plt.show()
 
-                    burt.skin.play(kp_name,ft=False,pos=True,skin=True,cam=True,rp=rp)
+                    #if rp%2==0:
+                    #    burt.skin.play_err(kp_name,ft=False,pos=True,skin=True,cam=True,rp=rp,rec=False)
+                    #else:
+                    #    burt.skin.play_err(kp_name,ft=False,pos=True,skin=True,cam=True,rp=rp,rec=True)
+                    burt.skin.play_err(kp_name,ft=False,pos=True,skin=True,cam=True,rp=rp,rec=True)
+
                     rp+=1
                     time.sleep(13)
+
+            if ipt == 'echo':
+                Z = []
+                burt.mat.write('start')
+                if burt.mat.read()=='ready':
+                    for i in range(0,200):
+                        time.sleep(0.05)
+                        burt.mat.write(str([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]))
+                        time.sleep(0.05)
+                        pred = float(burt.mat.read())
+                        Z.append(pred)
+                        print(pred)
+                        if pred > 0.8:
+                            print('error predicted')
+                            #burt.mat.write('stop')
+                            input('press enter to continue')
+                            break
+
+                    burt.mat.write('stop')
+                    open('{}_err.json'.format(name), "w").write(json.dumps(Z))
+
+                #while True:
+                #    data = burt.mat.read()
+                #    print(data)
+                #    #burt.mat.write('1')
+                #    #toc = time.time()
+                #    #for i in range(0,100):
+                #    #    data = burt.mat.read()
+                #    burt.mat.write(data)
+                #    #print(time.time()-toc)
 
             if ipt == 'xy':
                 base_seq = json.load(open('exp3/test_1651576480_traj_kp_replay0.json'))

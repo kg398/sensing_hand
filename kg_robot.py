@@ -10,12 +10,14 @@ import kg_robot_dashboard as kgrd
 import waypoints as wp
 import teach_mode as tm
 import skin_sense as ss
+import matlab_comms as mc
 
 class kg_robot():
-    def __init__(self, port=False, ee_port=False, db_host=False):
+    def __init__(self, port=False, ee_port=False, db_host=False, matlab_port=False):
         self.port = port
         self.ee_port = ee_port
         self.db_host = db_host
+        self.matlab_port = matlab_port
         if db_host!=False:
             self.dashboard = kgrd.kg_robot_dashboard(host=self.db_host)
             self.dashboard.init()
@@ -26,6 +28,8 @@ class kg_robot():
         #self.setup_cam()
         #self.hand = jh.jamming_hand(self)
         self.skin = ss.skin_sense(self)
+        if matlab_port!=False:
+            self.mat = mc.matlab_comms(self.matlab_port)
 
         #init ur5 connection
         self.open=False
@@ -239,6 +243,9 @@ class kg_robot():
         if self.db_host!=False:
             if self.dashboard.open==True:
                 self.dashboard.c.close()
+
+        if self.matlab_port!=False:
+            self.mat.close()
 
 
     #-------------------------------------------------------------------------------------------------------------------------------------------------------------------
